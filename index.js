@@ -1,18 +1,31 @@
 #!/usr/bin/env node
 
 const xmldoc = require('xmldoc');
-
 const fs = require('fs');
 
+const debug = false;
+
+const getNodeEnd = (node) => {
+  const find = `${node.name}>`;
+  return data.indexOf(find, node.position) + find.length;
+};
+const removeNode = (node) => {
+  let start = node.startTagPosition - 1;
+  let end = getNodeEnd(node);
+
+  replacements.push({ position: start, length: end - start, replacement: '' });
+};
 const replaceValue = (node, text) => {
+  if (node.val === text) {
+    return;
+  }
   replacements.push({ position: node.position, length: node.val.length, replacement: text });
 };
 const addAsFirstChild = (node, text) => {
   replacements.push({ position: node.position, length: 0, replacement: text });
 };
-const addAfter = (node, data, text) => {
-  const find = `${node.name}>`;
-  const endOfNode = data.indexOf(find, node.position) + find.length;
+const addAfter = (node, text) => {
+  const endOfNode = getNodeEnd(node);
   replacements.push({
     position: endOfNode,
     length: 0,
@@ -20,13 +33,16 @@ const addAfter = (node, data, text) => {
   });
 };
 
-const replacePlugin = (node) => {
+const replacePlugin = (node, flowVersion) => {
   const buildPlugins = node.descendantWithPath('build.plugins');
   buildPlugins.childrenNamed('plugin').forEach((plugin) => {
     const artifactId = plugin.descendantWithPath('artifactId');
-    if (artifactId.val === 'vaadin-maven-plugin') {
+    if (flowVersion && artifactId.val === 'vaadin-maven-plugin') {
       replaceValue(artifactId, 'flow-maven-plugin');
       replaceValue(plugin.descendantWithPath('version'), '${flow.version}');
+    } else if (!flowVersion && artifactId.val === 'flow-maven-plugin') {
+      replaceValue(artifactId, 'vaadin-maven-plugin');
+      replaceValue(plugin.descendantWithPath('version'), '${vaadin.version}');
     }
   });
 };
@@ -58,18 +74,22 @@ properties.eachChild((property) => {
     replaceValue(property, vaadinVersion);
     vaadinVersionNode = property;
   } else if (property.name === 'flow.version') {
-    replacements.push({ position: property.position, length: property.val.length, replacement: flowVersion });
+    if (!flowVersion) {
+      removeNode(property);
+    } else {
+      replaceValue(property, flowVersion);
+    }
     flowVersionHandled = true;
   }
 });
 
-if (vaadinVersionNode === undefined) {
+if (!vaadinVersionNode) {
   console.error('No vaadin.version property found. Is this a Vaadin project?');
   return;
 }
 
-if (!flowVersionHandled) {
-  addAfter(vaadinVersionNode, data, '\n' + indent.repeat(2) + `<flow.version>${flowVersion}</flow.version>`);
+if (flowVersion && !flowVersionHandled) {
+  addAfter(vaadinVersionNode, '\n' + indent.repeat(2) + `<flow.version>${flowVersion}</flow.version>`);
 }
 
 // Dependency management
@@ -81,15 +101,18 @@ dependencyManagement.eachChild((dependency) => {
   if (dependency.valueWithPath('artifactId') === 'vaadin-bom') {
     vaadinBomNode = dependency;
   } else if (dependency.valueWithPath('artifactId') === 'flow-bom') {
+    if (!flowVersion) {
+      removeNode(dependency);
+    }
     flowBomHandled = true;
     return;
   }
 });
-if (vaadinBomNode === undefined) {
+if (!vaadinBomNode) {
   console.log('No vaadin-bom dependency found. Is this a Vaadin project?');
   return;
 }
-if (!flowBomHandled) {
+if (!flowBomHandled && flowVersion) {
   // Must be first
   const dep = `\n${indent.repeat(3)}<dependency>
 ${indent.repeat(4)}<groupId>com.vaadin</groupId>
@@ -102,11 +125,11 @@ ${indent.repeat(3)}</dependency>`;
 }
 
 // Plugin name and version
-replacePlugin(document);
+replacePlugin(document, flowVersion);
 
 const profiles = document.descendantWithPath('profiles');
 profiles.childrenNamed('profile').forEach((profile) => {
-  replacePlugin(profile);
+  replacePlugin(profile, flowVersion);
 });
 
 // Replace and write
@@ -119,12 +142,14 @@ replacements.sort((a, b) => {
 });
 let output = data;
 replacements.forEach((replacement) => {
-  //   console.log(
-  //     'Replacing ' + output.substr(replacement.position, replacement.length) + ' with ' + replacement.replacement
-  //   );
+  if (debug) {
+    console.log(
+      'Replacing ' + output.substr(replacement.position, replacement.length) + ' with ' + replacement.replacement
+    );
+  }
   output =
     output.substr(0, replacement.position) +
     replacement.replacement +
     output.substr(replacement.position + replacement.length);
 });
-fs.writeFileSync('pom.xml.out', output);
+fs.writeFileSync('pom.xml', output);
