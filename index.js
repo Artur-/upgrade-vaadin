@@ -152,4 +152,6 @@ replacements.forEach((replacement) => {
     replacement.replacement +
     output.substr(replacement.position + replacement.length);
 });
+// Remove lines with only whitespace
+output = output.replace(/^[ \t]*\n/gm, '');
 fs.writeFileSync('pom.xml', output);
