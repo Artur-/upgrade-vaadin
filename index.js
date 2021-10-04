@@ -10,10 +10,24 @@ const getNodeEnd = (node) => {
   return data.indexOf(find, node.position) + find.length;
 };
 const removeNode = (node) => {
-  let start = node.startTagPosition - 1;
-  let end = getNodeEnd(node);
+  const start = node.startTagPosition - 1;
+  const end = getNodeEnd(node);
 
-  replacements.push({ position: start, length: end - start, replacement: '' });
+  let before = start - 1;
+  let after = end;
+  while (data.charAt(before) === ' ' || data.charAt(before) === '\t') {
+    before--;
+  }
+  while (data.charAt(after) === ' ' || data.charAt(after) === '\t') {
+    after++;
+  }
+
+  if (data.charAt(before) === '\n' && data.charAt(after) === '\n') {
+    // Remove the whole line
+    replacements.push({ position: before, length: after - before, replacement: '' });
+  } else {
+    replacements.push({ position: start, length: end - start, replacement: '' });
+  }
 };
 const replaceValue = (node, text) => {
   if (node.val === text) {
@@ -152,6 +166,5 @@ replacements.forEach((replacement) => {
     replacement.replacement +
     output.substr(replacement.position + replacement.length);
 });
-// Remove lines with only whitespace
-output = output.replace(/^[ \t]*\n/gm, '');
+
 fs.writeFileSync('pom.xml', output);
