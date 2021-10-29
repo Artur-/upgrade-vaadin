@@ -85,7 +85,9 @@ let vaadinVersionNode = undefined;
 let flowVersionHandled = false;
 properties.eachChild((property) => {
   if (property.name === 'vaadin.version') {
-    replaceValue(property, vaadinVersion);
+    if (vaadinVersion !== '-') {
+      replaceValue(property, vaadinVersion);
+    }
     vaadinVersionNode = property;
   } else if (property.name === 'flow.version') {
     if (!flowVersion) {
