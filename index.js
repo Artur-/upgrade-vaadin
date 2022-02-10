@@ -47,16 +47,25 @@ const addAfter = (node, text) => {
   });
 };
 
-const replacePlugin = (node, flowVersion) => {
+const replacePlugin = (node, flowVersion, isHilla) => {
   const buildPlugins = node.descendantWithPath('build.plugins');
   buildPlugins.childrenNamed('plugin').forEach((plugin) => {
     const artifactId = plugin.descendantWithPath('artifactId');
-    if (flowVersion && artifactId.val === 'vaadin-maven-plugin') {
+    const groupId = plugin.descendantWithPath('groupId');
+    if (flowVersion && (artifactId.val === 'vaadin-maven-plugin' || artifactId.val === 'hilla-maven-plugin')) {
+      replaceValue(groupId, 'com.vaadin');
       replaceValue(artifactId, 'flow-maven-plugin');
       replaceValue(plugin.descendantWithPath('version'), '${flow.version}');
     } else if (!flowVersion && artifactId.val === 'flow-maven-plugin') {
-      replaceValue(artifactId, 'vaadin-maven-plugin');
-      replaceValue(plugin.descendantWithPath('version'), '${vaadin.version}');
+      if (isHilla) {
+        replaceValue(groupId, 'dev.hilla');
+        replaceValue(artifactId, 'hilla-maven-plugin');
+        replaceValue(plugin.descendantWithPath('version'), '${hilla.version}');
+      } else {
+        replaceValue(groupId, 'com.vaadin');
+        replaceValue(artifactId, 'vaadin-maven-plugin');
+        replaceValue(plugin.descendantWithPath('version'), '${vaadin.version}');
+      }
     }
   });
 };
@@ -82,13 +91,15 @@ const indent = '    ';
 // Properties
 const properties = document.descendantWithPath('properties');
 let vaadinVersionNode = undefined;
+let isHilla = undefined;
 let flowVersionHandled = false;
 properties.eachChild((property) => {
-  if (property.name === 'vaadin.version') {
+  if (property.name === 'vaadin.version' || property.name === 'hilla.version') {
     if (vaadinVersion !== '-') {
       replaceValue(property, vaadinVersion);
     }
     vaadinVersionNode = property;
+    isHilla = (property.name === 'hilla.version');
   } else if (property.name === 'flow.version') {
     if (!flowVersion) {
       removeNode(property);
@@ -114,7 +125,7 @@ let flowBomHandled = false;
 let vaadinBomNode = undefined;
 
 dependencyManagement.eachChild((dependency) => {
-  if (dependency.valueWithPath('artifactId') === 'vaadin-bom') {
+  if (dependency.valueWithPath('artifactId') === 'vaadin-bom' || dependency.valueWithPath('artifactId') === 'hilla-bom') {
     vaadinBomNode = dependency;
   } else if (dependency.valueWithPath('artifactId') === 'flow-bom') {
     if (!flowVersion) {
@@ -141,11 +152,11 @@ ${indent.repeat(3)}</dependency>`;
 }
 
 // Plugin name and version
-replacePlugin(document, flowVersion);
+replacePlugin(document, flowVersion, isHilla);
 
 const profiles = document.descendantWithPath('profiles');
 profiles.childrenNamed('profile').forEach((profile) => {
-  replacePlugin(profile, flowVersion);
+  replacePlugin(profile, flowVersion, isHilla);
 });
 
 // Replace and write
