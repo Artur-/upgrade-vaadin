@@ -49,6 +49,9 @@ const addAfter = (node, text) => {
 
 const replacePlugin = (node, flowVersion, isHilla) => {
   const buildPlugins = node.descendantWithPath('build.plugins');
+  if (!buildPlugins) {
+    return;
+  }
   buildPlugins.childrenNamed('plugin').forEach((plugin) => {
     const artifactId = plugin.descendantWithPath('artifactId');
     const groupId = plugin.descendantWithPath('groupId');
