@@ -96,13 +96,21 @@ const properties = document.descendantWithPath('properties');
 let vaadinVersionNode = undefined;
 let isHilla = undefined;
 let flowVersionHandled = false;
+let prerelease = false;
+if (vaadinVersion !== '-' && !vaadinVersion.match(/^\d+\.\d+\.\d+$/)) {
+  prerelease = true;
+}
+if (flowVersion && !flowVersion.match(/^\d+\.\d+\.\d+$/)) {
+  prerelease = true;
+}
+
 properties.eachChild((property) => {
   if (property.name === 'vaadin.version' || property.name === 'hilla.version') {
     if (vaadinVersion !== '-') {
       replaceValue(property, vaadinVersion);
     }
     vaadinVersionNode = property;
-    isHilla = (property.name === 'hilla.version');
+    isHilla = property.name === 'hilla.version';
   } else if (property.name === 'flow.version') {
     if (!flowVersion) {
       removeNode(property);
@@ -128,7 +136,10 @@ let flowBomHandled = false;
 let vaadinBomNode = undefined;
 
 dependencyManagement.eachChild((dependency) => {
-  if (dependency.valueWithPath('artifactId') === 'vaadin-bom' || dependency.valueWithPath('artifactId') === 'hilla-bom') {
+  if (
+    dependency.valueWithPath('artifactId') === 'vaadin-bom' ||
+    dependency.valueWithPath('artifactId') === 'hilla-bom'
+  ) {
     vaadinBomNode = dependency;
   } else if (dependency.valueWithPath('artifactId') === 'flow-bom') {
     if (!flowVersion) {
@@ -152,6 +163,55 @@ ${indent.repeat(4)}<type>pom</type>
 ${indent.repeat(4)}<scope>import</scope>
 ${indent.repeat(3)}</dependency>`;
   addAsFirstChild(dependencyManagement, dep);
+}
+
+// Repositories
+if (prerelease) {
+  const repositories = document.descendantWithPath('repositories');
+  const pluginRepositories = document.descendantWithPath('pluginRepositories');
+  const repositoryCode = `${indent.repeat(2)}<repository>
+${indent.repeat(3)}<id>vaadin-prereleases</id>
+${indent.repeat(3)}<url>https://maven.vaadin.com/vaadin-prereleases/</url>
+${indent.repeat(2)}</repository>`;
+  const repositoriesCode = `${indent.repeat(1)}<repositories>
+${repositoryCode}
+${indent.repeat(1)}</repositories>`;
+  const pluginRepositoryCode = `${indent.repeat(2)}<pluginRepository>
+${indent.repeat(3)}<id>vaadin-prereleases</id>
+${indent.repeat(3)}<url>https://maven.vaadin.com/vaadin-prereleases/</url>
+${indent.repeat(2)}</pluginRepository>`;
+  const pluginRepositoriesCode = `${indent.repeat(1)}<pluginRepositories>
+${repositoryCode}
+${indent.repeat(1)}</pluginRepositories>`;
+
+  if (!repositories) {
+    addAfter(document.descendantWithPath('dependencyManagement'), "\n"+repositoriesCode);
+  } else {
+    const hasRepo = repositories.childrenNamed('repository').find((repo) => {
+      const url = repo.descendantWithPath('url').children[0].text;
+      return (
+        url.trim() === 'https://maven.vaadin.com/vaadin-prereleases' ||
+        url.trim() === 'https://maven.vaadin.com/vaadin-prereleases/'
+      );
+    });
+    if (!hasRepo) {
+      addAsFirstChild(repositories, "\n"+repositoryCode);
+    }
+  }
+  if (!pluginRepositories) {
+    addAfter(document.descendantWithPath('dependencyManagement'), "\n"+pluginRepositoriesCode);
+  } else {
+    const hasRepo = pluginRepositories.childrenNamed('pluginRepository').find((repo) => {
+      const url = repo.descendantWithPath('url').children[0].text;
+      return (
+        url.trim() === 'https://maven.vaadin.com/vaadin-prereleases' ||
+        url.trim() === 'https://maven.vaadin.com/vaadin-prereleases/'
+      );
+    });
+    if (!hasRepo) {
+      addAsFirstChild(pluginRepositories, "\n"+pluginRepositoryCode);
+    }
+  }
 }
 
 // Plugin name and version
